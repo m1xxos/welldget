@@ -269,10 +269,12 @@ export default class WellnessWidget extends React.Component {
       : { width: 'max-content', minWidth: '100%', minHeight: '100vh', boxSizing: 'border-box', padding: '56px 60px', background: '#e7e5df', fontFamily: FONT };
     return (
       <div style={pageStyle}>
-        <div style={{ margin: '0 0 14px 2px' }}>
-          <div style={{ fontFamily: CAVEAT, fontSize: '21px', color: '#b08a52', lineHeight: 1 }}>твой день</div>
-          <div style={{ fontFamily: FONT, fontSize: '12px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: '#9a8f7c', marginTop: '2px' }}>Hybrid · paper + air</div>
-        </div>
+        {!widget && (
+          <div style={{ margin: '0 0 22px 2px' }}>
+            <div style={{ fontFamily: CAVEAT, fontSize: '21px', color: '#b08a52', lineHeight: 1 }}>твой день</div>
+            <div style={{ fontFamily: FONT, fontSize: '12px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: '#9a8f7c', marginTop: '2px' }}>Hybrid · paper + air</div>
+          </div>
+        )}
 
         <div style={{ flex: 'none', width: widget ? 'auto' : '340px' }}>
           <div style={{ padding: '22px 20px 18px', borderRadius: '24px', background: '#f7f0e2', backgroundImage: 'radial-gradient(rgba(150,130,95,.05) 1px,transparent 1px)', backgroundSize: '7px 7px', border: '1px solid rgba(255,255,255,.6)', boxShadow: '0 26px 50px -24px rgba(86,72,46,.55),0 2px 6px rgba(86,72,46,.06)', WebkitAppRegion: widget ? 'no-drag' : undefined }}>
@@ -280,14 +282,14 @@ export default class WellnessWidget extends React.Component {
             {/* ============ LIST VIEW ============ */}
             {v.isList && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', WebkitAppRegion: widget ? 'drag' : undefined }}>
                   <div>
                     <div style={{ fontFamily: CAVEAT, fontSize: '27px', lineHeight: .85, color: '#3a352e' }}>сегодня</div>
                     <div style={{ fontFamily: FONT, fontSize: '12px', fontWeight: 600, color: '#9a8f7c', marginTop: '3px' }}>{v.today}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <Hover as="button" onClick={v.openSettings} title="настройки"
-                      baseStyle={{ width: '32px', height: '32px', flex: 'none', border: 'none', borderRadius: '50%', background: 'rgba(148,168,134,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      baseStyle={{ width: '32px', height: '32px', flex: 'none', border: 'none', borderRadius: '50%', background: 'rgba(148,168,134,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, WebkitAppRegion: widget ? 'no-drag' : undefined }}
                       hoverStyle={{ background: 'rgba(148,168,134,.3)' }}>
                       <svg width="17" height="17" viewBox="0 0 18 18"><g fill="none" stroke="#7c8a6c" strokeWidth="1.7" strokeLinecap="round"><path d="M2 5h11"></path><path d="M2 13h7"></path><circle cx="15" cy="5" r="2"></circle><circle cx="13" cy="13" r="2"></circle></g></svg>
                     </Hover>
@@ -354,10 +356,10 @@ export default class WellnessWidget extends React.Component {
             {/* ============ SETTINGS VIEW ============ */}
             {v.isSettings && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', WebkitAppRegion: widget ? 'drag' : undefined }}>
                   <div style={{ fontFamily: CAVEAT, fontSize: '26px', lineHeight: .85, color: '#3a352e' }}>настройки</div>
                   <Hover as="button" onClick={v.closeSettings}
-                    baseStyle={{ border: 'none', background: '#94a886', color: '#fff', fontFamily: FONT, fontSize: '12.5px', fontWeight: 700, padding: '7px 14px', borderRadius: '10px', cursor: 'pointer' }}
+                    baseStyle={{ border: 'none', background: '#94a886', color: '#fff', fontFamily: FONT, fontSize: '12.5px', fontWeight: 700, padding: '7px 14px', borderRadius: '10px', cursor: 'pointer', WebkitAppRegion: widget ? 'no-drag' : undefined }}
                     hoverStyle={{ background: '#86996f' }}>готово</Hover>
                 </div>
 
