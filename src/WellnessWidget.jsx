@@ -292,7 +292,14 @@ export default class WellnessWidget extends React.Component {
         )}
 
         <div style={{ flex: 'none', width: widget ? 'auto' : '340px' }}>
-          <div style={{ padding: '22px 20px 18px', borderRadius: '24px', background: '#f7f0e2', backgroundImage: 'radial-gradient(rgba(150,130,95,.05) 1px,transparent 1px)', backgroundSize: '7px 7px', border: '1px solid rgba(255,255,255,.6)', boxShadow: '0 26px 50px -24px rgba(86,72,46,.55),0 2px 6px rgba(86,72,46,.06)', WebkitAppRegion: widget ? 'no-drag' : undefined }}>
+          <div style={{ padding: widget ? '8px 20px 18px' : '22px 20px 18px', borderRadius: '24px', background: '#f7f0e2', backgroundImage: 'radial-gradient(rgba(150,130,95,.05) 1px,transparent 1px)', backgroundSize: '7px 7px', border: '1px solid rgba(255,255,255,.6)', boxShadow: '0 26px 50px -24px rgba(86,72,46,.55),0 2px 6px rgba(86,72,46,.06)', WebkitAppRegion: widget ? 'no-drag' : undefined }}>
+
+            {/* drag handle — grab here (above "сегодня") to move the widget */}
+            {widget && (
+              <div title="перетащить виджет" style={{ WebkitAppRegion: 'drag', cursor: 'grab', height: '20px', margin: '0 -12px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: '#ddd2b8' }} />
+              </div>
+            )}
 
             {/* ============ LIST VIEW ============ */}
             {v.isList && (
