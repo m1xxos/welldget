@@ -262,15 +262,20 @@ export default class WellnessWidget extends React.Component {
 
   render() {
     const v = this.renderVals();
+    // when wrapped by Electron, render as a floating transparent corner widget
+    const widget = typeof navigator !== 'undefined' && /Electron/.test(navigator.userAgent);
+    const pageStyle = widget
+      ? { width: '100%', minHeight: '100vh', boxSizing: 'border-box', padding: '12px 14px 24px', background: 'transparent', fontFamily: FONT, WebkitAppRegion: 'drag' }
+      : { width: 'max-content', minWidth: '100%', minHeight: '100vh', boxSizing: 'border-box', padding: '56px 60px', background: '#e7e5df', fontFamily: FONT };
     return (
-      <div style={{ width: 'max-content', minWidth: '100%', minHeight: '100vh', boxSizing: 'border-box', padding: '56px 60px', background: '#e7e5df', fontFamily: FONT }}>
-        <div style={{ margin: '0 0 22px 2px' }}>
+      <div style={pageStyle}>
+        <div style={{ margin: '0 0 14px 2px' }}>
           <div style={{ fontFamily: CAVEAT, fontSize: '21px', color: '#b08a52', lineHeight: 1 }}>твой день</div>
           <div style={{ fontFamily: FONT, fontSize: '12px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: '#9a8f7c', marginTop: '2px' }}>Hybrid · paper + air</div>
         </div>
 
-        <div style={{ flex: 'none', width: '340px' }}>
-          <div style={{ padding: '22px 20px 18px', borderRadius: '24px', background: '#f7f0e2', backgroundImage: 'radial-gradient(rgba(150,130,95,.05) 1px,transparent 1px)', backgroundSize: '7px 7px', border: '1px solid rgba(255,255,255,.6)', boxShadow: '0 26px 50px -24px rgba(86,72,46,.55),0 2px 6px rgba(86,72,46,.06)' }}>
+        <div style={{ flex: 'none', width: widget ? 'auto' : '340px' }}>
+          <div style={{ padding: '22px 20px 18px', borderRadius: '24px', background: '#f7f0e2', backgroundImage: 'radial-gradient(rgba(150,130,95,.05) 1px,transparent 1px)', backgroundSize: '7px 7px', border: '1px solid rgba(255,255,255,.6)', boxShadow: '0 26px 50px -24px rgba(86,72,46,.55),0 2px 6px rgba(86,72,46,.06)', WebkitAppRegion: widget ? 'no-drag' : undefined }}>
 
             {/* ============ LIST VIEW ============ */}
             {v.isList && (
