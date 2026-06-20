@@ -1,5 +1,6 @@
 const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const WIDTH = 372;
@@ -8,20 +9,62 @@ const MIN_HEIGHT = 120;
 const MAX_HEIGHT = 900;
 const MARGIN = 16;
 
+const CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+const CORNER_LABELS = {
+  'top-left': 'Сверху слева',
+  'top-right': 'Сверху справа',
+  'bottom-left': 'Снизу слева',
+  'bottom-right': 'Снизу справа',
+};
+
 let win = null;
 let tray = null;
+let corner = 'top-right';
+
+// ---- persistence (main process owns the config) ----
+function configPath() { return path.join(app.getPath('userData'), 'config.json'); }
+function loadConfig() {
+  try {
+    const c = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    if (CORNERS.includes(c.corner)) corner = c.corner;
+  } catch (e) {}
+}
+function saveConfig() {
+  try { fs.writeFileSync(configPath(), JSON.stringify({ corner })); } catch (e) {}
+}
+
+// ---- place the window at the configured corner given its current size ----
+function placeWindow() {
+  if (!win) return;
+  const { workArea } = screen.getPrimaryDisplay();
+  const [w, h] = win.getSize();
+  const left = workArea.x + MARGIN;
+  const right = workArea.x + workArea.width - w - MARGIN;
+  const top = workArea.y + MARGIN;
+  const bottom = workArea.y + workArea.height - h - MARGIN;
+  const map = {
+    'top-left': [left, top],
+    'top-right': [right, top],
+    'bottom-left': [left, bottom],
+    'bottom-right': [right, bottom],
+  };
+  const [x, y] = map[corner] || map['top-right'];
+  win.setPosition(Math.round(x), Math.round(y));
+}
+
+function setCorner(next) {
+  if (!CORNERS.includes(next) || next === corner) return;
+  corner = next;
+  saveConfig();
+  placeWindow();
+  buildTrayMenu();
+  if (win) win.webContents.send('corner-changed', corner); // keep the in-app UI in sync
+}
 
 function createWindow() {
-  const { workArea } = screen.getPrimaryDisplay();
-  // top-right corner of the active display
-  const x = Math.round(workArea.x + workArea.width - WIDTH - MARGIN);
-  const y = Math.round(workArea.y + MARGIN);
-
   win = new BrowserWindow({
     width: WIDTH,
     height: HEIGHT,
-    x,
-    y,
     frame: false,
     transparent: true,
     hasShadow: false,
@@ -44,6 +87,8 @@ function createWindow() {
   win.setAlwaysOnTop(true, 'floating');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
+  placeWindow();
+
   if (DEV_URL) {
     win.loadURL(DEV_URL);
   } else {
@@ -53,14 +98,17 @@ function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
-// resize the window to the height the renderer reports, keeping the top edge anchored
+// resize to the height the renderer reports, then re-anchor to the chosen corner
 ipcMain.on('widget-resize', (_e, h) => {
   if (!win) return;
   const height = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(h)));
   const [w, cur] = win.getContentSize();
-  if (cur === height && w === WIDTH) return;
-  win.setContentSize(WIDTH, height);
+  if (cur !== height || w !== WIDTH) win.setContentSize(WIDTH, height);
+  placeWindow();
 });
+
+ipcMain.on('widget-corner', (_e, next) => setCorner(next));
+ipcMain.on('widget-get-corner', (e) => { e.returnValue = corner; });
 
 function toggleWindow() {
   if (!win) { createWindow(); return; }
@@ -68,24 +116,50 @@ function toggleWindow() {
   else win.show();
 }
 
-function createTray() {
-  // simple template-image dot so the widget can be toggled / quit from the menu bar
+function trayIcon() {
+  const p = path.join(__dirname, 'trayTemplate.png');
+  if (fs.existsSync(p)) {
+    const img = nativeImage.createFromPath(p);
+    img.setTemplateImage(true);
+    return img;
+  }
+  // fallback dot if the asset is missing
   const img = nativeImage.createFromDataURL(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABYAAAAWCAYAAADEtGw7AAAAVUlEQVR4nO3SMQ7AIAxD0e9/6XRpJQYkFCkLfpJnFCdyrA0AAAAAAAAAAAAAAAAA8KdmZpaZ2T0z3T0z3b07d3f3iIjuvru7eyLi7d5793Z3d/cHkQ8M2QnQ2bsAAAAASUVORK5CYII='
   );
   img.setTemplateImage(true);
-  tray = new Tray(img);
-  tray.setToolTip('welldget');
+  return img;
+}
+
+function buildTrayMenu() {
+  if (!tray) return;
   const menu = Menu.buildFromTemplate([
     { label: 'Показать / скрыть виджет', click: toggleWindow },
+    { type: 'separator' },
+    {
+      label: 'Где показывать',
+      submenu: CORNERS.map(c => ({
+        label: CORNER_LABELS[c],
+        type: 'radio',
+        checked: corner === c,
+        click: () => setCorner(c),
+      })),
+    },
     { type: 'separator' },
     { label: 'Выход', role: 'quit' },
   ]);
   tray.setContextMenu(menu);
+}
+
+function createTray() {
+  tray = new Tray(trayIcon());
+  tray.setToolTip('welldget');
+  buildTrayMenu();
   tray.on('click', toggleWindow);
 }
 
 app.whenReady().then(() => {
+  loadConfig();
   // menu-bar widget: no Dock icon
   if (app.dock) app.dock.hide();
   createWindow();

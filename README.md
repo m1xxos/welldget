@@ -15,12 +15,21 @@ npm install
 npm run app          # builds the UI and opens the floating widget
 ```
 
-The widget appears in the **top-right corner**, lives in the **menu bar** (no
-Dock icon), and floats above other windows.
+The widget appears in a screen corner (top-right by default), lives in the
+**menu bar** (no Dock icon), and floats above other windows. The window
+auto-sizes to the card's height.
 
-- **Move it:** drag by the header ("твой день") or the margin around the card.
+- **Move it:** drag by the grip strip at the top of the card.
+- **Pick a corner:** Settings (⚙) → «где показывать» (top/bottom · left/right),
+  or the menu-bar icon → «Где показывать». The choice is remembered.
 - **Show / hide:** click the menu-bar icon.
 - **Quit:** menu-bar icon → «Выход» (or ⌘Q while focused).
+
+### Icons
+
+`npm run icons` regenerates `build/icon.png` and the menu-bar template from
+`scripts/gen-icon.cjs` (a sage rounded square with a cream ring + checkmark).
+The `.icns` is built from that PNG with `sips` + `iconutil`.
 
 ### Live development
 

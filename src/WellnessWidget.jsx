@@ -47,7 +47,13 @@ export default class WellnessWidget extends React.Component {
   state = {
     day: new Date().toDateString(), tasks: this.defaults(), runtime: {}, view: 'list',
     newName: '', newType: 'counter', newReps: 8, newPer: 1, newUnit: '', newMin: 30, newUrl: '',
+    corner: 'top-right',
   };
+
+  setCorner(c) {
+    this.setState({ corner: c });
+    if (this.isWidget && window.widget) window.widget.setCorner(c);
+  }
 
   // ---- migration from older shapes ----
   migrate(t) {
@@ -97,6 +103,11 @@ export default class WellnessWidget extends React.Component {
     this.reportHeight();
     setTimeout(() => this.reportHeight(), 250);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.reportHeight());
+    // sync the configured screen corner with the main process
+    if (this.isWidget && window.widget) {
+      try { this.setState({ corner: window.widget.getCorner() || 'top-right' }); } catch (e) {}
+      if (window.widget.onCornerChanged) window.widget.onCornerChanged(c => this.setState({ corner: c }));
+    }
   }
 
   componentWillUnmount() { clearInterval(this.timer); }
@@ -384,6 +395,20 @@ export default class WellnessWidget extends React.Component {
                     baseStyle={{ border: 'none', background: '#94a886', color: '#fff', fontFamily: FONT, fontSize: '12.5px', fontWeight: 700, padding: '7px 14px', borderRadius: '10px', cursor: 'pointer', WebkitAppRegion: widget ? 'no-drag' : undefined }}
                     hoverStyle={{ background: '#86996f' }}>готово</Hover>
                 </div>
+
+                {widget && (
+                  <div style={{ marginBottom: '18px' }}>
+                    <div style={{ fontFamily: FONT, fontSize: '11px', fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: '#b0a488', marginBottom: '7px' }}>где показывать</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      {[['top-left', '↖ слева сверху'], ['top-right', '↗ справа сверху'], ['bottom-left', '↙ слева снизу'], ['bottom-right', '↘ справа снизу']].map(([c, label]) => {
+                        const active = this.state.corner === c;
+                        return (
+                          <button key={c} onClick={() => this.setCorner(c)} style={{ border: 'none', borderRadius: '10px', padding: '9px 10px', fontFamily: FONT, fontSize: '12px', fontWeight: 700, cursor: 'pointer', textAlign: 'left', WebkitAppRegion: 'no-drag', background: active ? '#94a886' : '#ece2cb', color: active ? '#fff' : '#8a8070' }}>{label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ fontFamily: FONT, fontSize: '11px', fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: '#b0a488', marginBottom: '4px' }}>задачи</div>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
