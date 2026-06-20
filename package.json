@@ -1,8 +1,8 @@
 {
-  "name": "wellness-widget",
+  "name": "welldget",
   "private": true,
   "version": "1.0.0",
-  "description": "твой день — floating macOS wellness widget",
+  "description": "welldget — floating macOS wellness widget",
   "author": "m1xxos",
   "type": "module",
   "main": "electron/main.cjs",
@@ -28,8 +28,8 @@
     "esbuild@0.21.5": true
   },
   "build": {
-    "appId": "com.welldged.wellness",
-    "productName": "твой день",
+    "appId": "com.welldget.wellness",
+    "productName": "welldget",
     "files": [
       "dist/**",
       "electron/**"

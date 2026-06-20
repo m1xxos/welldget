@@ -24,6 +24,7 @@ function createWindow() {
     transparent: true,
     hasShadow: false,
     resizable: false,
+    movable: true,
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
@@ -62,7 +63,7 @@ function createTray() {
   );
   img.setTemplateImage(true);
   tray = new Tray(img);
-  tray.setToolTip('твой день');
+  tray.setToolTip('welldget');
   const menu = Menu.buildFromTemplate([
     { label: 'Показать / скрыть виджет', click: toggleWindow },
     { type: 'separator' },

@@ -1,4 +1,4 @@
-# твой день — Wellness Widget
+# welldget — Wellness Widget
 
 A small macOS desktop widget that floats in the corner of your screen: a daily
 wellness checklist with counters, timers, countdowns (incl. a "window airing"
@@ -41,7 +41,7 @@ npm run dev          # open the printed http://localhost:5173 URL
 ## Packaging a standalone `.app`
 
 ```bash
-npm run dist         # → release/mac-arm64/твой день.app
+npm run dist         # → release/mac-arm64/welldget.app
 ```
 
 > **Note on signing:** the produced `.app` runs only after it is code-signed.
