@@ -1,9 +1,11 @@
-const { app, BrowserWindow, screen, Menu, Tray, nativeImage } = require('electron');
+const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain } = require('electron');
 const path = require('path');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const WIDTH = 372;
-const HEIGHT = 640;
+const HEIGHT = 200; // initial; the renderer reports its real height and we resize to fit
+const MIN_HEIGHT = 120;
+const MAX_HEIGHT = 900;
 const MARGIN = 16;
 
 let win = null;
@@ -34,6 +36,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   });
 
@@ -49,6 +52,15 @@ function createWindow() {
 
   win.on('closed', () => { win = null; });
 }
+
+// resize the window to the height the renderer reports, keeping the top edge anchored
+ipcMain.on('widget-resize', (_e, h) => {
+  if (!win) return;
+  const height = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(h)));
+  const [w, cur] = win.getContentSize();
+  if (cur === height && w === WIDTH) return;
+  win.setContentSize(WIDTH, height);
+});
 
 function toggleWindow() {
   if (!win) { createWindow(); return; }

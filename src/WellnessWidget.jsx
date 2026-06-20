@@ -19,6 +19,9 @@ const FONT = "'Nunito',sans-serif";
 const CAVEAT = "'Caveat',cursive";
 
 export default class WellnessWidget extends React.Component {
+  isWidget = typeof navigator !== 'undefined' && /Electron/.test(navigator.userAgent);
+  pageRef = React.createRef();
+  _lastH = 0;
   KEY = 'wellness_hybrid_v3';
   PALETTE = ['#9aab78', '#8fb6b0', '#d98b6f', '#b79a78', '#cba85f', '#a99bc4'];
   PER_OPTIONS = [0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10, 25, 50, 100];
@@ -90,12 +93,24 @@ export default class WellnessWidget extends React.Component {
       }
     } catch (e) {}
     this.timer = setInterval(() => this.tick(), 1000);
+    // report once fonts settle so the measured height is accurate
+    this.reportHeight();
+    setTimeout(() => this.reportHeight(), 250);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.reportHeight());
   }
 
   componentWillUnmount() { clearInterval(this.timer); }
 
   componentDidUpdate() {
     try { const { day, tasks, runtime } = this.state; localStorage.setItem(this.KEY, JSON.stringify({ day, tasks, runtime })); } catch (e) {}
+    this.reportHeight();
+  }
+
+  // tell Electron the real content height so the transparent window fits the card
+  reportHeight() {
+    if (!this.isWidget || !window.widget || !this.pageRef.current) return;
+    const h = Math.ceil(this.pageRef.current.getBoundingClientRect().height);
+    if (h && h !== this._lastH) { this._lastH = h; window.widget.setHeight(h); }
   }
 
   tick() {
@@ -263,12 +278,12 @@ export default class WellnessWidget extends React.Component {
   render() {
     const v = this.renderVals();
     // when wrapped by Electron, render as a floating transparent corner widget
-    const widget = typeof navigator !== 'undefined' && /Electron/.test(navigator.userAgent);
+    const widget = this.isWidget;
     const pageStyle = widget
-      ? { width: '100%', minHeight: '100vh', boxSizing: 'border-box', padding: '12px 14px 24px', background: 'transparent', fontFamily: FONT, WebkitAppRegion: 'drag' }
+      ? { width: '100%', boxSizing: 'border-box', padding: '8px 16px 34px', background: 'transparent', fontFamily: FONT, WebkitAppRegion: 'drag' }
       : { width: 'max-content', minWidth: '100%', minHeight: '100vh', boxSizing: 'border-box', padding: '56px 60px', background: '#e7e5df', fontFamily: FONT };
     return (
-      <div style={pageStyle}>
+      <div ref={this.pageRef} style={pageStyle}>
         {!widget && (
           <div style={{ margin: '0 0 22px 2px' }}>
             <div style={{ fontFamily: CAVEAT, fontSize: '21px', color: '#b08a52', lineHeight: 1 }}>твой день</div>
