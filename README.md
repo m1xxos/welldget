@@ -4,6 +4,10 @@ A small macOS desktop widget that floats in the corner of your screen: a daily
 wellness checklist with counters, timers, countdowns (incl. a "window airing"
 mode) and check-off tasks. State is kept in `localStorage` and resets each day.
 
+<p align="center">
+  <img src="build/screenshot.png" alt="welldget floating widget" width="320">
+</p>
+
 Imported from the Claude Design prototype `Wellness Widget.dc.html` and wrapped
 in a frameless, transparent, always-on-top **Electron** window pinned to the
 top-right corner.
@@ -30,6 +34,9 @@ auto-sizes to the card's height.
 `npm run icons` regenerates `build/icon.png` and the menu-bar template from
 `scripts/gen-icon.cjs` (a sage rounded square with a cream ring + checkmark).
 The `.icns` is built from that PNG with `sips` + `iconutil`.
+
+`npm run screenshot` regenerates `build/screenshot.png` (the image above) by
+rendering the widget in a headless Electron window and cropping to the card.
 
 ### Live development
 

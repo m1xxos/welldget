@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "icons": "node scripts/gen-icon.cjs",
     "app": "vite build && electron .",
+    "screenshot": "vite build && electron scripts/screenshot.cjs",
     "app:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "dist": "vite build && electron-builder --mac"
   },

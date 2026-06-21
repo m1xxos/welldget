@@ -31,9 +31,8 @@ export default class WellnessWidget extends React.Component {
       { id: 'water', label: 'Попить воды', type: 'counter', color: '#8fb6b0', reps: 8, per: 0.25, unit: 'л' },
       { id: 'window', label: 'Открыть окно', type: 'countdown', color: '#94a886', mode: 'window', dur: 300 },
       { id: 'desk', label: 'Поработать стоя', type: 'timer', color: '#d98b6f', goalSec: 7200 },
-      { id: 'eyes', label: 'Пауза для глаз', type: 'counter', color: '#b79a78', reps: 3, per: 1, unit: '' },
-      { id: 'walk', label: 'Пройтись', type: 'check', color: '#cba85f', link: '' },
       { id: 'hn', label: 'Hacker News', type: 'check', color: '#e0794a', link: 'https://news.ycombinator.com' },
+      { id: 'notes', label: 'Записать задачи', type: 'check', color: '#a99bc4', link: '' },
     ];
   }
 

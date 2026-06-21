@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -88,6 +88,12 @@ function createWindow() {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
   placeWindow();
+
+  // open task links (e.g. Hacker News) in the user's default browser
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   if (DEV_URL) {
     win.loadURL(DEV_URL);
