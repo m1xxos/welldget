@@ -27,6 +27,12 @@ auto-sizes to the card's height.
 - **Pick a corner:** Settings (⚙) → «где показывать» (top/bottom · left/right),
   or the menu-bar icon → «Где показывать». The choice is remembered.
 - **Show / hide:** click the menu-bar icon.
+- **Always-on-top:** Settings (⚙) → «поверх всех окон», or the menu-bar icon.
+  Off by default, so the widget can be covered like a normal window.
+- **Updates:** the app checks GitHub releases on launch (and the menu-bar icon →
+  «Проверить обновления…»). If a newer version exists it offers to open the
+  matching DMG for download. *(Auto-install in place would require a signed app;
+  see the signing note below.)*
 - **Quit:** menu-bar icon → «Выход» (or ⌘Q while focused).
 
 ### Icons
@@ -74,5 +80,6 @@ npm run dist         # → release/mac-arm64/welldget.app
 | `src/WellnessWidget.jsx` | The widget UI + all task logic (React) |
 | `src/main.jsx`, `src/index.css` | React entry + keyframes |
 | `electron/main.cjs` | Frameless transparent corner window + menu-bar tray |
+| `electron/updater.cjs` | Checks GitHub releases and prompts to download updates |
 | `index.html` | Fonts (Nunito + Caveat) and root |
 | `build/entitlements.mac.plist` | macOS JIT entitlements for signing |

@@ -1,6 +1,9 @@
 const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { checkForUpdates } = require('./updater.cjs');
+
+const SIX_HOURS = 6 * 60 * 60 * 1000;
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const WIDTH = 372;
@@ -163,6 +166,7 @@ function buildTrayMenu() {
     { label: 'Показать / скрыть виджет', click: toggleWindow },
     { type: 'separator' },
     { label: 'Поверх всех окон', type: 'checkbox', checked: pinned, click: () => setPinned(!pinned) },
+    { label: 'Проверить обновления…', click: () => checkForUpdates({ silent: false }) },
     {
       label: 'Где показывать',
       submenu: CORNERS.map(c => ({
@@ -191,6 +195,10 @@ app.whenReady().then(() => {
   if (app.dock) app.dock.hide();
   createWindow();
   createTray();
+
+  // check GitHub for a newer release shortly after launch, then periodically
+  setTimeout(() => checkForUpdates({ silent: true }), 4000);
+  setInterval(() => checkForUpdates({ silent: true }), SIX_HOURS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
