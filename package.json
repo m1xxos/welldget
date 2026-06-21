@@ -1,7 +1,7 @@
 {
   "name": "welldget",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "welldget — floating macOS wellness widget",
   "author": "m1xxos",
   "type": "module",
@@ -42,10 +42,14 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "target": [
         {
           "target": "dmg",
-          "arch": "arm64"
+          "arch": [
+            "arm64",
+            "x64"
+          ]
         }
       ],
       "extendInfo": {

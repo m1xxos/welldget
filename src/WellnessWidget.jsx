@@ -46,12 +46,17 @@ export default class WellnessWidget extends React.Component {
   state = {
     day: new Date().toDateString(), tasks: this.defaults(), runtime: {}, view: 'list',
     newName: '', newType: 'counter', newReps: 8, newPer: 1, newUnit: '', newMin: 30, newUrl: '',
-    corner: 'top-right',
+    corner: 'top-right', pinned: false,
   };
 
   setCorner(c) {
     this.setState({ corner: c });
     if (this.isWidget && window.widget) window.widget.setCorner(c);
+  }
+
+  setPinned(v) {
+    this.setState({ pinned: v });
+    if (this.isWidget && window.widget) window.widget.setPinned(v);
   }
 
   // ---- migration from older shapes ----
@@ -106,6 +111,8 @@ export default class WellnessWidget extends React.Component {
     if (this.isWidget && window.widget) {
       try { this.setState({ corner: window.widget.getCorner() || 'top-right' }); } catch (e) {}
       if (window.widget.onCornerChanged) window.widget.onCornerChanged(c => this.setState({ corner: c }));
+      try { if (window.widget.getPinned) this.setState({ pinned: !!window.widget.getPinned() }); } catch (e) {}
+      if (window.widget.onPinnedChanged) window.widget.onPinnedChanged(p => this.setState({ pinned: p }));
     }
   }
 
@@ -394,6 +401,19 @@ export default class WellnessWidget extends React.Component {
                     baseStyle={{ border: 'none', background: '#94a886', color: '#fff', fontFamily: FONT, fontSize: '12.5px', fontWeight: 700, padding: '7px 14px', borderRadius: '10px', cursor: 'pointer', WebkitAppRegion: widget ? 'no-drag' : undefined }}
                     hoverStyle={{ background: '#86996f' }}>готово</Hover>
                 </div>
+
+                {widget && (
+                  <div style={{ marginBottom: '18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                    <div>
+                      <div style={{ fontFamily: FONT, fontSize: '13px', fontWeight: 700, color: '#3a352e' }}>поверх всех окон</div>
+                      <div style={{ fontFamily: FONT, fontSize: '11px', fontWeight: 600, color: '#a59c8b', marginTop: '1px' }}>иначе ведёт себя как обычное окно</div>
+                    </div>
+                    <button onClick={() => this.setPinned(!this.state.pinned)} title="поверх всех окон"
+                      style={{ WebkitAppRegion: 'no-drag', flex: 'none', border: 'none', cursor: 'pointer', width: '46px', height: '26px', borderRadius: '13px', padding: '3px', background: this.state.pinned ? '#94a886' : '#d9cdb2', display: 'flex', justifyContent: this.state.pinned ? 'flex-end' : 'flex-start', transition: 'background .2s, justify-content .2s' }}>
+                      <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(86,72,46,.3)' }} />
+                    </button>
+                  </div>
+                )}
 
                 {widget && (
                   <div style={{ marginBottom: '18px' }}>

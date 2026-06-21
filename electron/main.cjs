@@ -20,6 +20,7 @@ const CORNER_LABELS = {
 let win = null;
 let tray = null;
 let corner = 'top-right';
+let pinned = false; // false → behaves like a normal window that other apps can cover
 
 // ---- persistence (main process owns the config) ----
 function configPath() { return path.join(app.getPath('userData'), 'config.json'); }
@@ -27,10 +28,29 @@ function loadConfig() {
   try {
     const c = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
     if (CORNERS.includes(c.corner)) corner = c.corner;
+    if (typeof c.pinned === 'boolean') pinned = c.pinned;
   } catch (e) {}
 }
 function saveConfig() {
-  try { fs.writeFileSync(configPath(), JSON.stringify({ corner })); } catch (e) {}
+  try { fs.writeFileSync(configPath(), JSON.stringify({ corner, pinned })); } catch (e) {}
+}
+
+// when pinned, float above everything on every Space; otherwise act like a
+// normal window that lives on one Space and can be covered by other apps
+function applyPinned() {
+  if (!win) return;
+  win.setAlwaysOnTop(pinned, 'floating');
+  win.setVisibleOnAllWorkspaces(pinned, { visibleOnFullScreen: pinned });
+}
+
+function setPinned(next) {
+  next = !!next;
+  if (next === pinned) return;
+  pinned = next;
+  saveConfig();
+  applyPinned();
+  buildTrayMenu();
+  if (win) win.webContents.send('pinned-changed', pinned); // keep the in-app UI in sync
 }
 
 // ---- place the window at the configured corner given its current size ----
@@ -73,9 +93,8 @@ function createWindow() {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    alwaysOnTop: true,
-    // show on every Space and even over fullscreen apps
-    visibleOnAllWorkspaces: true,
+    alwaysOnTop: pinned,
+    visibleOnAllWorkspaces: pinned,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -83,9 +102,7 @@ function createWindow() {
     },
   });
 
-  // float above normal windows without stealing focus from fullscreen apps
-  win.setAlwaysOnTop(true, 'floating');
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  applyPinned();
 
   placeWindow();
 
@@ -116,6 +133,9 @@ ipcMain.on('widget-resize', (_e, h) => {
 ipcMain.on('widget-corner', (_e, next) => setCorner(next));
 ipcMain.on('widget-get-corner', (e) => { e.returnValue = corner; });
 
+ipcMain.on('widget-pinned', (_e, next) => setPinned(next));
+ipcMain.on('widget-get-pinned', (e) => { e.returnValue = pinned; });
+
 function toggleWindow() {
   if (!win) { createWindow(); return; }
   if (win.isVisible()) win.hide();
@@ -142,6 +162,7 @@ function buildTrayMenu() {
   const menu = Menu.buildFromTemplate([
     { label: 'Показать / скрыть виджет', click: toggleWindow },
     { type: 'separator' },
+    { label: 'Поверх всех окон', type: 'checkbox', checked: pinned, click: () => setPinned(!pinned) },
     {
       label: 'Где показывать',
       submenu: CORNERS.map(c => ({

@@ -8,4 +8,8 @@ contextBridge.exposeInMainWorld('widget', {
   getCorner: () => ipcRenderer.sendSync('widget-get-corner'),
   setCorner: (corner) => ipcRenderer.send('widget-corner', corner),
   onCornerChanged: (cb) => ipcRenderer.on('corner-changed', (_e, corner) => cb(corner)),
+  // always-on-top ("pinned") vs. normal coverable window
+  getPinned: () => ipcRenderer.sendSync('widget-get-pinned'),
+  setPinned: (v) => ipcRenderer.send('widget-pinned', v),
+  onPinnedChanged: (cb) => ipcRenderer.on('pinned-changed', (_e, v) => cb(v)),
 });
