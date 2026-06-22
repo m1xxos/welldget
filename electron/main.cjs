@@ -139,6 +139,8 @@ ipcMain.on('widget-get-corner', (e) => { e.returnValue = corner; });
 ipcMain.on('widget-pinned', (_e, next) => setPinned(next));
 ipcMain.on('widget-get-pinned', (e) => { e.returnValue = pinned; });
 
+ipcMain.on('widget-check-updates', () => checkForUpdates({ silent: false }));
+
 function toggleWindow() {
   if (!win) { createWindow(); return; }
   if (win.isVisible()) win.hide();

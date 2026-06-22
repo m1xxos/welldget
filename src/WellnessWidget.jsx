@@ -44,10 +44,25 @@ export default class WellnessWidget extends React.Component {
   }
 
   state = {
-    day: new Date().toDateString(), tasks: this.defaults(), runtime: {}, view: 'list',
+    day: this.dayString(0), tasks: this.defaults(), runtime: {}, view: 'list',
     newName: '', newType: 'counter', newReps: 8, newPer: 1, newUnit: '', newMin: 30, newUrl: '',
-    corner: 'top-right', pinned: false,
+    corner: 'top-right', pinned: false, resetHour: 0,
   };
+
+  // the "today" string used to decide when tasks roll over; shifting by
+  // resetHour lets the new day start at a chosen hour instead of midnight
+  dayString(resetHour) {
+    const d = new Date();
+    d.setHours(d.getHours() - (resetHour || 0));
+    return d.toDateString();
+  }
+
+  setResetHour(dir) {
+    this.setState(s => {
+      const resetHour = (s.resetHour + dir + 24) % 24;
+      return { resetHour, day: this.dayString(resetHour) };
+    });
+  }
 
   setCorner(c) {
     this.setState({ corner: c });
@@ -57,6 +72,10 @@ export default class WellnessWidget extends React.Component {
   setPinned(v) {
     this.setState({ pinned: v });
     if (this.isWidget && window.widget) window.widget.setPinned(v);
+  }
+
+  checkUpdates() {
+    if (this.isWidget && window.widget && window.widget.checkUpdates) window.widget.checkUpdates();
   }
 
   // ---- migration from older shapes ----
@@ -91,12 +110,13 @@ export default class WellnessWidget extends React.Component {
       const raw = localStorage.getItem(this.KEY);
       if (raw) {
         const p = JSON.parse(raw);
-        const today = new Date().toDateString();
+        const resetHour = (typeof p.resetHour === 'number') ? ((p.resetHour % 24) + 24) % 24 : 0;
+        const today = this.dayString(resetHour);
         const tasks = (p.tasks && p.tasks.length ? p.tasks : this.defaults()).map(t => this.migrate(t));
         const runtime = {};
         if (p.day === today && p.runtime) tasks.forEach(t => { runtime[t.id] = this.migrateRuntime(t, p.runtime[t.id]); });
         else tasks.forEach(t => { runtime[t.id] = this.initRuntime(t); });
-        this.setState({ day: today, tasks, runtime });
+        this.setState({ day: today, tasks, runtime, resetHour });
       } else {
         const rt = {}; this.state.tasks.forEach(t => { rt[t.id] = this.initRuntime(t); });
         this.setState({ runtime: rt });
@@ -119,7 +139,7 @@ export default class WellnessWidget extends React.Component {
   componentWillUnmount() { clearInterval(this.timer); }
 
   componentDidUpdate() {
-    try { const { day, tasks, runtime } = this.state; localStorage.setItem(this.KEY, JSON.stringify({ day, tasks, runtime })); } catch (e) {}
+    try { const { day, tasks, runtime, resetHour } = this.state; localStorage.setItem(this.KEY, JSON.stringify({ day, tasks, runtime, resetHour })); } catch (e) {}
     this.reportHeight();
   }
 
@@ -131,6 +151,14 @@ export default class WellnessWidget extends React.Component {
   }
 
   tick() {
+    // roll over to a fresh day (and reset progress) once the configured hour passes
+    const today = this.dayString(this.state.resetHour);
+    if (today !== this.state.day) {
+      const runtime = {};
+      this.state.tasks.forEach(t => { runtime[t.id] = this.initRuntime(t); });
+      this.setState({ day: today, runtime });
+      return;
+    }
     this.setState(s => {
       let changed = false; const rt = { ...s.runtime };
       s.tasks.forEach(t => {
@@ -287,6 +315,9 @@ export default class WellnessWidget extends React.Component {
       newMinText: s.newMin + ' мин', newMinDec: () => this.newStepMin(-1), newMinInc: () => this.newStepMin(1),
       newUrl: s.newUrl, onNewUrl: (e) => this.setState({ newUrl: e.target.value }),
       addTask: () => this.addTask(),
+      resetHourText: String(s.resetHour).padStart(2, '0') + ':00',
+      resetDec: () => this.setResetHour(-1), resetInc: () => this.setResetHour(1),
+      checkUpdates: () => this.checkUpdates(),
       addBtnStyle: { width: '100%', border: 'none', borderRadius: '11px', padding: '10px', fontFamily: FONT, fontSize: '13.5px', fontWeight: 700, cursor: 'pointer', transition: 'opacity .2s', ...(canAdd ? { background: '#3a352e', color: '#f7f0e2', opacity: 1 } : { background: '#d8ccb3', color: '#fff', opacity: .7 }) },
       stop: (e) => e.stopPropagation(),
     };
@@ -426,6 +457,26 @@ export default class WellnessWidget extends React.Component {
                         );
                       })}
                     </div>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontFamily: FONT, fontSize: '13px', fontWeight: 700, color: '#3a352e' }}>начало нового дня</div>
+                    <div style={{ fontFamily: FONT, fontSize: '11px', fontWeight: 600, color: '#a59c8b', marginTop: '1px' }}>в это время задачи сбрасываются</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flex: 'none', WebkitAppRegion: widget ? 'no-drag' : undefined }}>
+                    <button onClick={v.resetDec} style={v.stepBtn}>−</button>
+                    <span style={{ fontFamily: FONT, fontSize: '13px', fontWeight: 700, color: '#3a352e', minWidth: '44px', textAlign: 'center' }}>{v.resetHourText}</span>
+                    <button onClick={v.resetInc} style={v.stepBtnP}>+</button>
+                  </div>
+                </div>
+
+                {widget && (
+                  <div style={{ marginBottom: '18px' }}>
+                    <Hover as="button" onClick={v.checkUpdates}
+                      baseStyle={{ width: '100%', border: 'none', borderRadius: '11px', padding: '10px', fontFamily: FONT, fontSize: '13px', fontWeight: 700, cursor: 'pointer', background: '#ece2cb', color: '#7c715a', WebkitAppRegion: 'no-drag', transition: 'background .2s' }}
+                      hoverStyle={{ background: '#e2d6ba' }}>Проверить обновления</Hover>
                   </div>
                 )}
 

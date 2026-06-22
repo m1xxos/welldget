@@ -29,10 +29,13 @@ auto-sizes to the card's height.
 - **Show / hide:** click the menu-bar icon.
 - **Always-on-top:** Settings (⚙) → «поверх всех окон», or the menu-bar icon.
   Off by default, so the widget can be covered like a normal window.
-- **Updates:** the app checks GitHub releases on launch (and the menu-bar icon →
-  «Проверить обновления…»). If a newer version exists it offers to open the
-  matching DMG for download. *(Auto-install in place would require a signed app;
-  see the signing note below.)*
+- **New-day reset:** Settings (⚙) → «начало нового дня» picks the hour at which a
+  new day starts and all task progress clears. The widget rolls over on its own
+  while running, not just on relaunch.
+- **Updates:** the app checks GitHub releases on launch, via the menu-bar icon →
+  «Проверить обновления…», and via Settings (⚙) → «Проверить обновления». If a
+  newer version exists it offers to open the matching DMG for download.
+  *(Auto-install in place would require a signed app; see the signing note below.)*
 - **Quit:** menu-bar icon → «Выход» (or ⌘Q while focused).
 
 ### Icons

@@ -1,7 +1,7 @@
 {
   "name": "welldget",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "welldget — floating macOS wellness widget",
   "author": "m1xxos",
   "type": "module",

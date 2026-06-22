@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld('widget', {
   getPinned: () => ipcRenderer.sendSync('widget-get-pinned'),
   setPinned: (v) => ipcRenderer.send('widget-pinned', v),
   onPinnedChanged: (cb) => ipcRenderer.on('pinned-changed', (_e, v) => cb(v)),
+  // manually check GitHub for a newer release
+  checkUpdates: () => ipcRenderer.send('widget-check-updates'),
 });
