@@ -163,7 +163,8 @@ export default class WellnessWidget extends React.Component {
       let changed = false; const rt = { ...s.runtime };
       s.tasks.forEach(t => {
         const r = rt[t.id]; if (!r) return;
-        if (t.type === 'timer' && r.running && r.elapsed < t.goalSec) { rt[t.id] = { ...r, elapsed: r.elapsed + 1 }; changed = true; }
+        // the timer keeps counting past the goal — the ring just stays full
+        if (t.type === 'timer' && r.running) { rt[t.id] = { ...r, elapsed: r.elapsed + 1 }; changed = true; }
         if (t.type === 'countdown' && r.phase === 'running' && r.left > 0) { rt[t.id] = { ...r, left: r.left - 1 }; changed = true; }
       });
       return changed ? { runtime: rt } : null;
