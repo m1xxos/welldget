@@ -47,6 +47,18 @@ The `.icns` is built from that PNG with `sips` + `iconutil`.
 `npm run screenshot` regenerates `build/screenshot.png` (the image above) by
 rendering the widget in a headless Electron window and cropping to the card.
 
+### Tests
+
+```bash
+npm test             # builds, then runs scripts/test-timers.cjs
+```
+
+The checks drive the real UI in a hidden Electron window: they seed
+`localStorage` with a task mid-progress, tap its row with a real mouse event and
+watch how the runtime evolves. That covers the parts unit tests would miss — the
+1s `setInterval`, the localStorage round-trip and the tap handlers. Exits
+non-zero on the first failing check, so it works as a CI gate.
+
 ### Live development
 
 ```bash
@@ -84,5 +96,6 @@ npm run dist         # → release/mac-arm64/welldget.app
 | `src/main.jsx`, `src/index.css` | React entry + keyframes |
 | `electron/main.cjs` | Frameless transparent corner window + menu-bar tray |
 | `electron/updater.cjs` | Checks GitHub releases and prompts to download updates |
+| `scripts/test-timers.cjs` | Timer/countdown regression checks (`npm test`) |
 | `index.html` | Fonts (Nunito + Caveat) and root |
 | `build/entitlements.mac.plist` | macOS JIT entitlements for signing |
