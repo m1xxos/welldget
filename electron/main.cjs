@@ -4,6 +4,7 @@ const fs = require('fs');
 const { checkForUpdates } = require('./updater.cjs');
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
+const DOCK_SETTLE = 150; // ms macOS takes to act on an activation-policy change
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const WIDTH = 372;
@@ -24,6 +25,8 @@ let win = null;
 let tray = null;
 let corner = 'top-right';
 let pinned = false; // false → behaves like a normal window that other apps can cover
+let trayVisible = true; // false → no menu-bar icon; the widget itself is the only UI
+let dockVisible = false; // false → accessory app: no Dock icon, no app menu
 
 // ---- persistence (main process owns the config) ----
 function configPath() { return path.join(app.getPath('userData'), 'config.json'); }
@@ -32,10 +35,12 @@ function loadConfig() {
     const c = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
     if (CORNERS.includes(c.corner)) corner = c.corner;
     if (typeof c.pinned === 'boolean') pinned = c.pinned;
+    if (typeof c.trayVisible === 'boolean') trayVisible = c.trayVisible;
+    if (typeof c.dockVisible === 'boolean') dockVisible = c.dockVisible;
   } catch (e) {}
 }
 function saveConfig() {
-  try { fs.writeFileSync(configPath(), JSON.stringify({ corner, pinned })); } catch (e) {}
+  try { fs.writeFileSync(configPath(), JSON.stringify({ corner, pinned, trayVisible, dockVisible })); } catch (e) {}
 }
 
 // when pinned, float above everything on every Space; otherwise act like a
@@ -44,6 +49,11 @@ function applyPinned() {
   if (!win) return;
   win.setAlwaysOnTop(pinned, 'floating');
   win.setVisibleOnAllWorkspaces(pinned, { visibleOnFullScreen: pinned });
+  // that call puts the app back on a regular activation policy, which resurrects
+  // the Dock icon — so re-assert whichever one the user actually asked for. It
+  // lands a moment later than the call itself, hence the second pass.
+  applyDockPolicy();
+  setTimeout(applyDockPolicy, DOCK_SETTLE);
 }
 
 function setPinned(next) {
@@ -54,6 +64,67 @@ function setPinned(next) {
   applyPinned();
   buildTrayMenu();
   if (win) win.webContents.send('pinned-changed', pinned); // keep the in-app UI in sync
+}
+
+// The menu-bar icon, the Dock icon and the widget itself are the three ways to
+// reach the app. Dropping the last icon while the widget is hidden would leave a
+// running app with nothing to click, so in that case the widget comes back.
+function ensureReachable() {
+  if (trayVisible || dockVisible) return;
+  if (!win) createWindow();
+  else if (!win.isVisible()) win.show();
+}
+
+function setTrayVisible(next) {
+  next = !!next;
+  if (next === trayVisible) return;
+  trayVisible = next;
+  saveConfig();
+  applyTrayVisible();
+  if (win) win.webContents.send('tray-visible-changed', trayVisible);
+}
+
+function applyTrayVisible() {
+  if (trayVisible) {
+    if (!tray) createTray();
+    else buildTrayMenu();
+    return;
+  }
+  if (tray) { tray.destroy(); tray = null; }
+  ensureReachable();
+}
+
+function setDockVisible(next) {
+  next = !!next;
+  if (next === dockVisible) return;
+  dockVisible = next;
+  saveConfig();
+  applyDockVisible();
+  buildTrayMenu();
+  if (win) win.webContents.send('dock-visible-changed', dockVisible);
+}
+
+// Showing the Dock icon also turns the app from an accessory into a regular one,
+// which is what gives it an app menu (and with it a working ⌘Q).
+//
+// The activation policy is set explicitly rather than left to app.dock.hide():
+// once anything has flipped the app to the regular policy (setVisibleOnAllWorkspaces
+// does, see applyPinned) macOS quietly ignores app.dock.hide() for the rest of
+// the run, while setActivationPolicy() still gets through.
+function applyDockPolicy() {
+  if (!app.dock) return;
+  if (dockVisible) {
+    app.setActivationPolicy('regular');
+    app.dock.show();
+  } else {
+    app.setActivationPolicy('accessory');
+    app.dock.hide();
+  }
+}
+
+function applyDockVisible() {
+  applyDockPolicy();
+  ensureReachable();
 }
 
 // ---- place the window at the configured corner given its current size ----
@@ -139,7 +210,15 @@ ipcMain.on('widget-get-corner', (e) => { e.returnValue = corner; });
 ipcMain.on('widget-pinned', (_e, next) => setPinned(next));
 ipcMain.on('widget-get-pinned', (e) => { e.returnValue = pinned; });
 
+ipcMain.on('widget-tray-visible', (_e, next) => setTrayVisible(next));
+ipcMain.on('widget-get-tray-visible', (e) => { e.returnValue = trayVisible; });
+
+ipcMain.on('widget-dock-visible', (_e, next) => setDockVisible(next));
+ipcMain.on('widget-get-dock-visible', (e) => { e.returnValue = dockVisible; });
+
 ipcMain.on('widget-check-updates', () => checkForUpdates({ silent: false }));
+
+ipcMain.on('widget-quit', () => app.quit());
 
 function toggleWindow() {
   if (!win) { createWindow(); return; }
@@ -168,6 +247,8 @@ function buildTrayMenu() {
     { label: 'Показать / скрыть виджет', click: toggleWindow },
     { type: 'separator' },
     { label: 'Поверх всех окон', type: 'checkbox', checked: pinned, click: () => setPinned(!pinned) },
+    { label: 'Иконка в доке', type: 'checkbox', checked: dockVisible, click: () => setDockVisible(!dockVisible) },
+    { label: 'Скрыть эту иконку', click: () => setTrayVisible(false) },
     { label: 'Проверить обновления…', click: () => checkForUpdates({ silent: false }) },
     {
       label: 'Где показывать',
@@ -193,10 +274,10 @@ function createTray() {
 
 app.whenReady().then(() => {
   loadConfig();
-  // menu-bar widget: no Dock icon
-  if (app.dock) app.dock.hide();
   createWindow();
-  createTray();
+  if (trayVisible) createTray();
+  // menu-bar widget by default: no Dock icon unless the user asked for one
+  applyDockPolicy();
 
   // check GitHub for a newer release shortly after launch, then periodically
   setTimeout(() => checkForUpdates({ silent: true }), 4000);
@@ -204,6 +285,7 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    else if (win && !win.isVisible()) win.show();
   });
 });
 

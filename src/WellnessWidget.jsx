@@ -46,7 +46,7 @@ export default class WellnessWidget extends React.Component {
   state = {
     day: this.dayString(0), tasks: this.defaults(), runtime: {}, view: 'list',
     newName: '', newType: 'counter', newReps: 8, newPer: 1, newUnit: '', newMin: 30, newUrl: '',
-    corner: 'top-right', pinned: false, resetHour: 0,
+    corner: 'top-right', pinned: false, trayVisible: true, dockVisible: false, resetHour: 0,
   };
 
   // the "today" string used to decide when tasks roll over; shifting by
@@ -74,8 +74,22 @@ export default class WellnessWidget extends React.Component {
     if (this.isWidget && window.widget) window.widget.setPinned(v);
   }
 
+  setTrayVisible(v) {
+    this.setState({ trayVisible: v });
+    if (this.isWidget && window.widget && window.widget.setTrayVisible) window.widget.setTrayVisible(v);
+  }
+
+  setDockVisible(v) {
+    this.setState({ dockVisible: v });
+    if (this.isWidget && window.widget && window.widget.setDockVisible) window.widget.setDockVisible(v);
+  }
+
   checkUpdates() {
     if (this.isWidget && window.widget && window.widget.checkUpdates) window.widget.checkUpdates();
+  }
+
+  quit() {
+    if (this.isWidget && window.widget && window.widget.quit) window.widget.quit();
   }
 
   // ---- migration from older shapes ----
@@ -133,6 +147,10 @@ export default class WellnessWidget extends React.Component {
       if (window.widget.onCornerChanged) window.widget.onCornerChanged(c => this.setState({ corner: c }));
       try { if (window.widget.getPinned) this.setState({ pinned: !!window.widget.getPinned() }); } catch (e) {}
       if (window.widget.onPinnedChanged) window.widget.onPinnedChanged(p => this.setState({ pinned: p }));
+      try { if (window.widget.getTrayVisible) this.setState({ trayVisible: !!window.widget.getTrayVisible() }); } catch (e) {}
+      if (window.widget.onTrayVisibleChanged) window.widget.onTrayVisibleChanged(v => this.setState({ trayVisible: v }));
+      try { if (window.widget.getDockVisible) this.setState({ dockVisible: !!window.widget.getDockVisible() }); } catch (e) {}
+      if (window.widget.onDockVisibleChanged) window.widget.onDockVisibleChanged(v => this.setState({ dockVisible: v }));
     }
   }
 
@@ -318,7 +336,18 @@ export default class WellnessWidget extends React.Component {
       addTask: () => this.addTask(),
       resetHourText: String(s.resetHour).padStart(2, '0') + ':00',
       resetDec: () => this.setResetHour(-1), resetInc: () => this.setResetHour(1),
+      toggles: [
+        { key: 'pinned', label: 'поверх всех окон', hint: 'иначе ведёт себя как обычное окно',
+          on: s.pinned, toggle: () => this.setPinned(!s.pinned) },
+        { key: 'tray', label: 'иконка в меню-баре', hint: s.trayVisible ? 'через неё виджет можно скрыть' : 'виджет отсюда больше не спрятать',
+          on: s.trayVisible, toggle: () => this.setTrayVisible(!s.trayVisible) },
+        { key: 'dock', label: 'иконка в доке', hint: s.dockVisible ? 'виджет виден среди обычных приложений' : 'обычно виджету место в меню-баре',
+          on: s.dockVisible, toggle: () => this.setDockVisible(!s.dockVisible) },
+      ],
+      // no menu-bar icon and no Dock icon — the widget is the only way out
+      orphaned: !s.trayVisible && !s.dockVisible,
       checkUpdates: () => this.checkUpdates(),
+      quit: () => this.quit(),
       addBtnStyle: { width: '100%', border: 'none', borderRadius: '11px', padding: '10px', fontFamily: FONT, fontSize: '13.5px', fontWeight: 700, cursor: 'pointer', transition: 'opacity .2s', ...(canAdd ? { background: '#3a352e', color: '#f7f0e2', opacity: 1 } : { background: '#d8ccb3', color: '#fff', opacity: .7 }) },
       stop: (e) => e.stopPropagation(),
     };
@@ -434,18 +463,18 @@ export default class WellnessWidget extends React.Component {
                     hoverStyle={{ background: '#86996f' }}>готово</Hover>
                 </div>
 
-                {widget && (
-                  <div style={{ marginBottom: '18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                {widget && v.toggles.map(t => (
+                  <div key={t.key} style={{ marginBottom: '18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                     <div>
-                      <div style={{ fontFamily: FONT, fontSize: '13px', fontWeight: 700, color: '#3a352e' }}>поверх всех окон</div>
-                      <div style={{ fontFamily: FONT, fontSize: '11px', fontWeight: 600, color: '#a59c8b', marginTop: '1px' }}>иначе ведёт себя как обычное окно</div>
+                      <div style={{ fontFamily: FONT, fontSize: '13px', fontWeight: 700, color: '#3a352e' }}>{t.label}</div>
+                      <div style={{ fontFamily: FONT, fontSize: '11px', fontWeight: 600, color: '#a59c8b', marginTop: '1px' }}>{t.hint}</div>
                     </div>
-                    <button onClick={() => this.setPinned(!this.state.pinned)} title="поверх всех окон"
-                      style={{ WebkitAppRegion: 'no-drag', flex: 'none', border: 'none', cursor: 'pointer', width: '46px', height: '26px', borderRadius: '13px', padding: '3px', background: this.state.pinned ? '#94a886' : '#d9cdb2', display: 'flex', justifyContent: this.state.pinned ? 'flex-end' : 'flex-start', transition: 'background .2s, justify-content .2s' }}>
+                    <button onClick={t.toggle} title={t.label}
+                      style={{ WebkitAppRegion: 'no-drag', flex: 'none', border: 'none', cursor: 'pointer', width: '46px', height: '26px', borderRadius: '13px', padding: '3px', background: t.on ? '#94a886' : '#d9cdb2', display: 'flex', justifyContent: t.on ? 'flex-end' : 'flex-start', transition: 'background .2s, justify-content .2s' }}>
                       <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(86,72,46,.3)' }} />
                     </button>
                   </div>
-                )}
+                ))}
 
                 {widget && (
                   <div style={{ marginBottom: '18px' }}>
@@ -478,6 +507,14 @@ export default class WellnessWidget extends React.Component {
                     <Hover as="button" onClick={v.checkUpdates}
                       baseStyle={{ width: '100%', border: 'none', borderRadius: '11px', padding: '10px', fontFamily: FONT, fontSize: '13px', fontWeight: 700, cursor: 'pointer', background: '#ece2cb', color: '#7c715a', WebkitAppRegion: 'no-drag', transition: 'background .2s' }}
                       hoverStyle={{ background: '#e2d6ba' }}>Проверить обновления</Hover>
+                  </div>
+                )}
+
+                {widget && v.orphaned && (
+                  <div style={{ marginBottom: '18px' }}>
+                    <Hover as="button" onClick={v.quit}
+                      baseStyle={{ width: '100%', border: 'none', borderRadius: '11px', padding: '10px', fontFamily: FONT, fontSize: '13px', fontWeight: 700, cursor: 'pointer', background: '#f0e0d6', color: '#b4674a', WebkitAppRegion: 'no-drag', transition: 'background .2s' }}
+                      hoverStyle={{ background: '#e8d1c3' }}>Выйти из welldget</Hover>
                   </div>
                 )}
 
