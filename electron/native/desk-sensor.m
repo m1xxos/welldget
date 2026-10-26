@@ -12,7 +12,14 @@ typedef enum {
     STATE_STANDING = 1
 } DeskState;
 
+typedef enum {
+    MOTION_IDLE = 0,
+    MOTION_UP = 1,
+    MOTION_DOWN = 2
+} MotionPhase;
+
 static DeskState current_state = STATE_SITTING;
+static MotionPhase motion_phase = MOTION_IDLE;
 static BOOL test_mode = NO;
 static CFRunLoopRef main_run_loop = NULL;
 
@@ -21,14 +28,20 @@ static double base_gx = 0.0, base_gy = 0.0, base_gz = -1.0;
 static BOOL calibrated = NO;
 static int warmup_samples = 0;
 
+// High-frequency vibration tracking (motor hum vs quiet)
+static double prev_az = -1.0;
+static double vibe_energy = 0.0;
+
 // Gyroscope tracking
 static double current_gyro_deg_s = 0.0;
 
-// Motion kinematics: drift-free low-pass filtered acceleration
-static double smooth_acc = 0.0;
+// Motion kinematics & state machine
 static double last_accel_time = 0.0;
-static double up_dur = 0.0;
-static double down_dur = 0.0;
+static double vel_z = 0.0;
+static double motion_dur = 0.0;
+static double est_displacement = 0.0;
+static double quiet_dur = 0.0;
+static double cooldown_dur = 0.0;
 
 static inline double get_monotonic_time() {
     struct timespec ts;
@@ -41,13 +54,13 @@ static void emit_json(const char *json) {
     fflush(stdout);
 }
 
-static void emit_state_change(DeskState new_state, double duration, double confidence, double acc) {
+static void emit_state_change(DeskState new_state, double duration, double confidence, double delta_pos) {
     current_state = new_state;
     char buf[256];
     snprintf(buf, sizeof(buf),
-             "{\"event\":\"state\",\"state\":\"%s\",\"duration\":%.2f,\"confidence\":%.2f,\"smooth_acc\":%.4f}",
+             "{\"event\":\"state\",\"state\":\"%s\",\"duration\":%.2f,\"confidence\":%.2f,\"delta_pos\":%.3f}",
              (new_state == STATE_STANDING ? "standing" : "sitting"),
-             duration, confidence, acc);
+             duration, confidence, delta_pos);
     emit_json(buf);
 }
 
@@ -59,6 +72,7 @@ static void process_accel(double ax, double ay, double az, double t) {
     if (last_accel_time == 0.0) {
         last_accel_time = t;
         base_gx = ax; base_gy = ay; base_gz = az;
+        prev_az = az;
         return;
     }
 
@@ -72,6 +86,7 @@ static void process_accel(double ax, double ay, double az, double t) {
         base_gx = 0.95 * base_gx + 0.05 * ax;
         base_gy = 0.95 * base_gy + 0.05 * ay;
         base_gz = 0.95 * base_gz + 0.05 * az;
+        prev_az = az;
         if (warmup_samples >= 75) {
             calibrated = YES;
             char buf[128];
@@ -81,59 +96,141 @@ static void process_accel(double ax, double ay, double az, double t) {
         return;
     }
 
-    // 2. Project dynamic acceleration along the gravity axis (in m/s^2)
+    // 2. High-frequency vibration tracking (40-120 Hz motor hum)
+    double raw_diff = az - prev_az;
+    prev_az = az;
+    vibe_energy = 0.96 * vibe_energy + 0.04 * (raw_diff * raw_diff);
+    double vibe_rms_mg = sqrt(vibe_energy) * 1000.0;
+
+    // 3. Project dynamic linear acceleration along gravity vector (in m/s^2)
     double g_norm = sqrt(base_gx * base_gx + base_gy * base_gy + base_gz * base_gz);
     if (g_norm < 1e-3) g_norm = 1.0;
     double unit_gx = base_gx / g_norm;
     double unit_gy = base_gy / g_norm;
     double unit_gz = base_gz / g_norm;
 
-    // Upward dynamic acceleration: positive when moving UP
-    double lin_acc_vertical = ((ax - base_gx) * unit_gx +
-                               (ay - base_gy) * unit_gy +
-                               (az - base_gz) * unit_gz) * 9.80665;
+    // Upward dynamic acceleration: positive when accelerating UP, negative when DOWN
+    double lin_acc = ((ax - base_gx) * unit_gx +
+                      (ay - base_gy) * unit_gy +
+                      (az - base_gz) * unit_gz) * 9.80665;
 
-    // 3. Low-pass filtered acceleration (tau ≈ 0.4s) — mathematically drift-free!
-    smooth_acc = 0.992 * smooth_acc + 0.008 * lin_acc_vertical;
-
-    // Slow baseline adaptation when completely quiet
-    if (fabs(smooth_acc) < 0.002 && current_gyro_deg_s < 0.5) {
-        base_gx = 0.9995 * base_gx + 0.0005 * ax;
-        base_gy = 0.9995 * base_gy + 0.0005 * ay;
-        base_gz = 0.9995 * base_gz + 0.0005 * az;
+    // 4. Post-transition Cooldown (allows braking spike to fully dissipate)
+    if (cooldown_dur > 0.0) {
+        cooldown_dur -= dt;
+        motion_phase = MOTION_IDLE;
+        vel_z = 0.0;
+        motion_dur = 0.0;
+        est_displacement = 0.0;
+        quiet_dur = 0.0;
+        // Settle baseline gently if stationary
+        if (current_gyro_deg_s < 0.8 && fabs(lin_acc) < 0.03) {
+            base_gx = 0.995 * base_gx + 0.005 * ax;
+            base_gy = 0.995 * base_gy + 0.005 * ay;
+            base_gz = 0.995 * base_gz + 0.005 * az;
+        }
+        return;
     }
 
-    // 4. Gyroscope gating: picking up or carrying laptop resets direction timers
+    // 5. Gyroscope gating: picking up or carrying laptop cancels motion
     if (current_gyro_deg_s > 2.5) {
-        up_dur = 0.0;
-        down_dur = 0.0;
+        motion_phase = MOTION_IDLE;
+        motion_dur = 0.0;
+        est_displacement = 0.0;
+        vel_z = 0.0;
+        quiet_dur = 0.0;
+        return;
+    }
+
+    // 6. Kinematic State Machine
+    if (motion_phase == MOTION_IDLE) {
+        // Continuous baseline adaptation when resting:
+        // Automatically absorbs static desk flex from resting forearms/elbows
+        if (current_gyro_deg_s < 0.8 && fabs(lin_acc) < 0.03) {
+            base_gx = 0.9985 * base_gx + 0.0015 * ax;
+            base_gy = 0.9985 * base_gy + 0.0015 * ay;
+            base_gz = 0.9985 * base_gz + 0.0015 * az;
+        }
+
+        // Leaky velocity in idle state (prevents unbounded drift from zero-g noise)
+        vel_z = 0.997 * vel_z + lin_acc * dt;
+
+        // Motion trigger condition:
+        // Real desk ramp creates sustained velocity > 5 mm/s and directional acceleration
+        if (vel_z > 0.005 && lin_acc > 0.004) {
+            motion_phase = MOTION_UP;
+            motion_dur = dt;
+            est_displacement = 0.0;
+            quiet_dur = 0.0;
+        } else if (vel_z < -0.005 && lin_acc < -0.004) {
+            motion_phase = MOTION_DOWN;
+            motion_dur = dt;
+            est_displacement = 0.0;
+            quiet_dur = 0.0;
+        }
     } else {
-        // Sustained acceleration in one direction:
-        // Real desk measurements: UP start = +11 mm/s^2, DOWN start = -10 mm/s^2
-        if (smooth_acc > 0.0035) { // +3.5 mm/s^2 sustained upward
-            up_dur += dt;
-            down_dur = 0.0;
-            if (up_dur >= 1.5 && current_state != STATE_STANDING) {
-                emit_state_change(STATE_STANDING, up_dur, 0.98, smooth_acc);
-            }
-        } else if (smooth_acc < -0.0035) { // -3.5 mm/s^2 sustained downward
-            down_dur += dt;
-            up_dur = 0.0;
-            if (down_dur >= 1.5 && current_state != STATE_SITTING) {
-                emit_state_change(STATE_SITTING, down_dur, 0.98, smooth_acc);
+        // Active motion tracking
+        motion_dur += dt;
+
+        // Maintain constant cruise speed if motor vibration is present
+        if (vibe_rms_mg > 1.0) {
+            if (motion_phase == MOTION_UP && vel_z < 0.030) {
+                vel_z = 0.995 * vel_z + 0.005 * 0.042;
+            } else if (motion_phase == MOTION_DOWN && vel_z > -0.030) {
+                vel_z = 0.995 * vel_z + 0.005 * (-0.043);
             }
         } else {
-            up_dur = fmax(0.0, up_dur - dt * 2.0);
-            down_dur = fmax(0.0, down_dur - dt * 2.0);
+            vel_z = 0.998 * vel_z + lin_acc * dt;
+        }
+
+        est_displacement += vel_z * dt;
+
+        // Braking detection: motor vibration ends or sharp brake deceleration occurs
+        BOOL is_braking = NO;
+        if (motion_phase == MOTION_UP && (lin_acc < -0.050 || (vibe_rms_mg < 0.85 && motion_dur > 2.0))) {
+            is_braking = YES;
+        }
+        if (motion_phase == MOTION_DOWN && (lin_acc > 0.050 || (vibe_rms_mg < 0.85 && motion_dur > 2.0))) {
+            is_braking = YES;
+        }
+
+        if (is_braking || fabs(vel_z) < 0.005) {
+            quiet_dur += dt;
+        } else {
+            quiet_dur = fmax(0.0, quiet_dur - dt * 2.0);
+        }
+
+        // Confirmation requirement:
+        // Duration MUST be >= 3.0 seconds AND displacement MUST be >= 10 cm!
+        // Rejects all typing, bumps, leaning, chair shifts (< 1.0s, < 1 cm).
+        if (quiet_dur >= 0.4 || motion_dur > 15.0) {
+            if (motion_phase == MOTION_UP) {
+                if (motion_dur >= 3.0 && est_displacement >= 0.10) {
+                    emit_state_change(STATE_STANDING, motion_dur, 0.99, est_displacement);
+                    cooldown_dur = 3.0;
+                }
+            } else if (motion_phase == MOTION_DOWN) {
+                if (motion_dur >= 3.0 && est_displacement <= -0.10) {
+                    emit_state_change(STATE_SITTING, motion_dur, 0.99, est_displacement);
+                    cooldown_dur = 3.0;
+                }
+            }
+
+            // Reset motion state
+            motion_phase = MOTION_IDLE;
+            motion_dur = 0.0;
+            est_displacement = 0.0;
+            vel_z = 0.0;
+            quiet_dur = 0.0;
         }
     }
 
     if (test_mode) {
         static int print_count = 0;
         if (++print_count % 30 == 0) {
-            printf("\r[t=%.1fs] Acc=%+.2fmm/s^2 UpDur=%.1fs DownDur=%.1fs Gyro=%.1f°/s State=%s   ",
-                   t, smooth_acc * 1000.0, up_dur, down_dur, current_gyro_deg_s,
-                   (current_state == STATE_STANDING ? "STANDING" : "SITTING"));
+            printf("\r[t=%.1fs] State=%s Motion=%s Acc=%+.1fmm/s^2 Vel=%+.1fmm/s Disp=%+.1fcm Vibe=%.2fmg Gyro=%.1f°/s   ",
+                   t, (current_state == STATE_STANDING ? "STAND" : "SIT"),
+                   (motion_phase == MOTION_UP ? "UP" : (motion_phase == MOTION_DOWN ? "DOWN" : "IDLE")),
+                   lin_acc * 1000.0, vel_z * 1000.0, est_displacement * 100.0, vibe_rms_mg, current_gyro_deg_s);
             fflush(stdout);
         }
     }
@@ -159,7 +256,7 @@ static void on_accel_report(void *context, IOReturn result, void *sender,
 
 static void on_gyro_report(void *context, IOReturn result, void *sender,
                            IOHIDReportType type, uint32_t reportID,
-                           uint8_t *report, CFIndex reportLength) {
+                            uint8_t *report, CFIndex reportLength) {
     if (reportLength == 22) {
         int32_t gx_raw = *(int32_t *)(report + 6);
         int32_t gy_raw = *(int32_t *)(report + 10);
