@@ -47,6 +47,7 @@ export default class WellnessWidget extends React.Component {
     day: this.dayString(0), tasks: this.defaults(), runtime: {}, view: 'list',
     newName: '', newType: 'counter', newReps: 8, newPer: 1, newUnit: '', newMin: 30, newUrl: '',
     corner: 'top-right', pinned: false, trayVisible: true, dockVisible: false, resetHour: 0,
+    autoDesk: true, deskPhysicalState: 'sitting', deskSensorStatus: null,
   };
 
   // the "today" string used to decide when tasks roll over; shifting by
@@ -82,6 +83,11 @@ export default class WellnessWidget extends React.Component {
   setDockVisible(v) {
     this.setState({ dockVisible: v });
     if (this.isWidget && window.widget && window.widget.setDockVisible) window.widget.setDockVisible(v);
+  }
+
+  setAutoDesk(v) {
+    this.setState({ autoDesk: v });
+    if (this.isWidget && window.widget && window.widget.setAutoDesk) window.widget.setAutoDesk(v);
   }
 
   checkUpdates() {
@@ -151,6 +157,35 @@ export default class WellnessWidget extends React.Component {
       if (window.widget.onTrayVisibleChanged) window.widget.onTrayVisibleChanged(v => this.setState({ trayVisible: v }));
       try { if (window.widget.getDockVisible) this.setState({ dockVisible: !!window.widget.getDockVisible() }); } catch (e) {}
       if (window.widget.onDockVisibleChanged) window.widget.onDockVisibleChanged(v => this.setState({ dockVisible: v }));
+      try { if (window.widget.getAutoDesk) this.setState({ autoDesk: !!window.widget.getAutoDesk() }); } catch (e) {}
+      if (window.widget.onAutoDeskChanged) window.widget.onAutoDeskChanged(v => this.setState({ autoDesk: v }));
+      try {
+        if (window.widget.getDeskSensorStatus) {
+          const st = window.widget.getDeskSensorStatus();
+          if (st) this.setState({ deskSensorStatus: st, deskPhysicalState: st.state || 'sitting' });
+        }
+      } catch (e) {}
+      if (window.widget.onDeskSensorStatusChanged) window.widget.onDeskSensorStatusChanged(st => this.setState({ deskSensorStatus: st }));
+      if (window.widget.onDeskStateChanged) {
+        window.widget.onDeskStateChanged(({ state }) => {
+          this.setState(s => {
+            const deskTask = s.tasks.find(t => t.id === 'desk') ||
+              s.tasks.find(t => t.type === 'timer' && (t.label.toLowerCase().includes('стоя') || t.label.toLowerCase().includes('стол')));
+            const nextPhysical = state === 'standing' ? 'standing' : 'sitting';
+            if (!deskTask) return { deskPhysicalState: nextPhysical };
+            const r = s.runtime[deskTask.id] || this.initRuntime(deskTask);
+            const shouldRun = (nextPhysical === 'standing');
+            if (r.running === shouldRun) return { deskPhysicalState: nextPhysical };
+            return {
+              deskPhysicalState: nextPhysical,
+              runtime: {
+                ...s.runtime,
+                [deskTask.id]: { ...r, running: shouldRun },
+              },
+            };
+          });
+        });
+      }
     }
   }
 
@@ -265,8 +300,17 @@ export default class WellnessWidget extends React.Component {
     }
     if (t.type === 'timer') {
       const done = r.elapsed >= t.goalSec;
+      let sub = r.running ? 'идёт…' : (r.elapsed > 0 && !done ? 'на паузе' : '');
+      const isDesk = t.id === 'desk' || (t.type === 'timer' && (t.label.toLowerCase().includes('стоя') || t.label.toLowerCase().includes('стол')));
+      if (isDesk && this.state.autoDesk && this.state.deskSensorStatus?.supported) {
+        if (r.running && this.state.deskPhysicalState === 'standing') {
+          sub = 'стол поднят · идёт…';
+        } else if (!r.running && this.state.deskPhysicalState === 'sitting' && r.elapsed > 0) {
+          sub = 'стол опущен · на паузе';
+        }
+      }
       return { id: t.id, isRing: true, color: t.color, ringOffset: this.ringOff(r.elapsed / t.goalSec), done, running: r.running, label: t.label,
-        sub: r.running ? 'идёт…' : (r.elapsed > 0 && !done ? 'на паузе' : ''), subStyle: { fontFamily: FONT, fontSize: '11.5px', fontWeight: 600, color: '#a59c8b' },
+        sub, subStyle: { fontFamily: FONT, fontSize: '11.5px', fontWeight: 600, color: '#a59c8b' },
         labelStyle: this.lbl(done), rightText: this.fmtH(r.elapsed) + ' / ' + this.durLabel(t.goalSec), rightStyle: rs, tap: () => this.tapTask(t) };
     }
     // countdown
@@ -343,6 +387,13 @@ export default class WellnessWidget extends React.Component {
           on: s.trayVisible, toggle: () => this.setTrayVisible(!s.trayVisible) },
         { key: 'dock', label: 'иконка в доке', hint: s.dockVisible ? 'виджет виден среди обычных приложений' : 'обычно виджету место в меню-баре',
           on: s.dockVisible, toggle: () => this.setDockVisible(!s.dockVisible) },
+        ...(s.deskSensorStatus?.supported ? [{
+          key: 'autoDesk',
+          label: 'автоопределение стола',
+          hint: s.deskSensorStatus?.ready ? 'датчики включают таймер при подъёме и паузу при спуске' : 'калибровка датчиков макбука…',
+          on: s.autoDesk,
+          toggle: () => this.setAutoDesk(!s.autoDesk),
+        }] : []),
       ],
       // no menu-bar icon and no Dock icon — the widget is the only way out
       orphaned: !s.trayVisible && !s.dockVisible,

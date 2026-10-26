@@ -24,4 +24,11 @@ contextBridge.exposeInMainWorld('widget', {
   checkUpdates: () => ipcRenderer.send('widget-check-updates'),
   // quit — the in-app way out when the menu-bar icon is hidden
   quit: () => ipcRenderer.send('widget-quit'),
+  // auto desk height detection
+  getAutoDesk: () => ipcRenderer.sendSync('widget-get-auto-desk'),
+  setAutoDesk: (v) => ipcRenderer.send('widget-auto-desk', v),
+  onAutoDeskChanged: (cb) => ipcRenderer.on('auto-desk-changed', (_e, v) => cb(v)),
+  getDeskSensorStatus: () => ipcRenderer.sendSync('widget-get-desk-sensor-status'),
+  onDeskSensorStatusChanged: (cb) => ipcRenderer.on('desk-sensor-status-changed', (_e, v) => cb(v)),
+  onDeskStateChanged: (cb) => ipcRenderer.on('desk-state-changed', (_e, v) => cb(v)),
 });

@@ -1,7 +1,7 @@
 {
   "name": "welldget",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "welldget — floating macOS wellness widget",
   "author": "m1xxos",
   "type": "module",
@@ -11,11 +11,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "icons": "node scripts/gen-icon.cjs",
-    "app": "vite build && electron .",
+    "build:sensor": "scripts/build-sensor.sh",
+    "app": "npm run build:sensor && vite build && electron .",
     "screenshot": "vite build && electron scripts/screenshot.cjs",
-    "app:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
-    "dist": "vite build && electron-builder --mac",
-    "test": "vite build && electron scripts/test-timers.cjs && electron scripts/test-icons.cjs"
+    "app:dev": "npm run build:sensor && VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "dist": "npm run build:sensor && vite build && electron-builder --mac",
+    "test": "npm run build:sensor && vite build && electron scripts/test-timers.cjs && electron scripts/test-icons.cjs && electron scripts/test-desk-sensor.cjs"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -36,6 +37,9 @@
     "files": [
       "dist/**",
       "electron/**"
+    ],
+    "asarUnpack": [
+      "electron/bin/**"
     ],
     "directories": {
       "output": "release"

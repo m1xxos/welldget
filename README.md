@@ -41,6 +41,11 @@ auto-sizes to the card's height.
 - **New-day reset:** Settings (⚙) → «начало нового дня» picks the hour at which a
   new day starts and all task progress clears. The widget rolls over on its own
   while running, not just on relaunch.
+- **Auto-detect standing desk:** On Apple Silicon MacBooks, the built-in SPU motion
+  sensors (accelerometer and gyroscope) detect when your motorized standing desk
+  is raised or lowered. The «Поработать стоя» timer automatically starts on lift
+  and pauses on descent, with DSP filtering against typing, chair bumps, and carrying.
+  Toggle in Settings (⚙) → «автоопределение стола» or via the menu-bar icon.
 - **Updates:** the app checks GitHub releases on launch, via the menu-bar icon →
   «Проверить обновления…», and via Settings (⚙) → «Проверить обновления». If a
   newer version exists it offers to open the matching DMG for download.
@@ -114,8 +119,11 @@ npm run dist         # → release/mac-arm64/welldget.app
 | `src/WellnessWidget.jsx` | The widget UI + all task logic (React) |
 | `src/main.jsx`, `src/index.css` | React entry + keyframes |
 | `electron/main.cjs` | Frameless transparent corner window + menu-bar tray |
+| `electron/sensor.cjs` | Manages sensor helper process lifecycle and IPC |
+| `electron/native/desk-sensor.m` | Low-level SPU IMU sensor daemon (IOKit) |
 | `electron/updater.cjs` | Checks GitHub releases and prompts to download updates |
 | `scripts/test-timers.cjs` | Timer/countdown regression checks (`npm test`) |
 | `scripts/test-icons.cjs` | Menu-bar / Dock icon visibility checks (`npm test`) |
+| `scripts/test-desk-sensor.cjs` | Desk auto-detection regression checks (`npm test`) |
 | `index.html` | Fonts (Nunito + Caveat) and root |
 | `build/entitlements.mac.plist` | macOS JIT entitlements for signing |

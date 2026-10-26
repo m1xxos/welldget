@@ -2,6 +2,7 @@ const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain, shell } = 
 const path = require('path');
 const fs = require('fs');
 const { checkForUpdates } = require('./updater.cjs');
+const { DeskSensorManager } = require('./sensor.cjs');
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 const DOCK_SETTLE = 150; // ms macOS takes to act on an activation-policy change
@@ -27,6 +28,9 @@ let corner = 'top-right';
 let pinned = false; // false → behaves like a normal window that other apps can cover
 let trayVisible = true; // false → no menu-bar icon; the widget itself is the only UI
 let dockVisible = false; // false → accessory app: no Dock icon, no app menu
+let autoDesk = process.platform === 'darwin' && process.arch === 'arm64';
+let sensorManager = null;
+let deskPhysicalState = 'sitting';
 
 // ---- persistence (main process owns the config) ----
 function configPath() { return path.join(app.getPath('userData'), 'config.json'); }
@@ -37,10 +41,46 @@ function loadConfig() {
     if (typeof c.pinned === 'boolean') pinned = c.pinned;
     if (typeof c.trayVisible === 'boolean') trayVisible = c.trayVisible;
     if (typeof c.dockVisible === 'boolean') dockVisible = c.dockVisible;
+    if (typeof c.autoDesk === 'boolean') autoDesk = c.autoDesk;
   } catch (e) {}
 }
 function saveConfig() {
-  try { fs.writeFileSync(configPath(), JSON.stringify({ corner, pinned, trayVisible, dockVisible })); } catch (e) {}
+  try { fs.writeFileSync(configPath(), JSON.stringify({ corner, pinned, trayVisible, dockVisible, autoDesk })); } catch (e) {}
+}
+
+function initSensor() {
+  if (sensorManager) return;
+  sensorManager = new DeskSensorManager({
+    onStateChange: ({ state, duration, confidence, deltaPos }) => {
+      deskPhysicalState = state;
+      buildTrayMenu();
+      if (win && win.webContents) {
+        win.webContents.send('desk-state-changed', { state, duration, confidence, deltaPos });
+      }
+    },
+    onStatusChange: ({ available, ready }) => {
+      buildTrayMenu();
+      if (win && win.webContents) {
+        win.webContents.send('desk-sensor-status-changed', { available, ready });
+      }
+    },
+  });
+  if (autoDesk && sensorManager.isSupported()) {
+    sensorManager.start();
+  }
+}
+
+function setAutoDesk(next) {
+  next = !!next;
+  if (next === autoDesk) return;
+  autoDesk = next;
+  saveConfig();
+  if (sensorManager) {
+    if (autoDesk) sensorManager.start();
+    else sensorManager.stop();
+  }
+  buildTrayMenu();
+  if (win && win.webContents) win.webContents.send('auto-desk-changed', autoDesk);
 }
 
 // when pinned, float above everything on every Space; otherwise act like a
@@ -216,6 +256,17 @@ ipcMain.on('widget-get-tray-visible', (e) => { e.returnValue = trayVisible; });
 ipcMain.on('widget-dock-visible', (_e, next) => setDockVisible(next));
 ipcMain.on('widget-get-dock-visible', (e) => { e.returnValue = dockVisible; });
 
+ipcMain.on('widget-get-auto-desk', (e) => { e.returnValue = autoDesk; });
+ipcMain.on('widget-auto-desk', (_e, v) => setAutoDesk(v));
+ipcMain.on('widget-get-desk-sensor-status', (e) => {
+  e.returnValue = {
+    supported: sensorManager ? sensorManager.isSupported() : false,
+    available: sensorManager ? sensorManager.sensorAvailable : false,
+    ready: sensorManager ? sensorManager.ready : false,
+    state: deskPhysicalState,
+  };
+});
+
 ipcMain.on('widget-check-updates', () => checkForUpdates({ silent: false }));
 
 ipcMain.on('widget-quit', () => app.quit());
@@ -243,9 +294,26 @@ function trayIcon() {
 
 function buildTrayMenu() {
   if (!tray) return;
-  const menu = Menu.buildFromTemplate([
+  const items = [
     { label: 'Показать / скрыть виджет', click: toggleWindow },
     { type: 'separator' },
+  ];
+
+  if (sensorManager && sensorManager.isSupported()) {
+    items.push({
+      label: `Стол: ${deskPhysicalState === 'standing' ? 'стоя ✦' : 'сидя'}`,
+      enabled: false,
+    });
+    items.push({
+      label: 'Автоопределение стола',
+      type: 'checkbox',
+      checked: autoDesk,
+      click: () => setAutoDesk(!autoDesk),
+    });
+    items.push({ type: 'separator' });
+  }
+
+  items.push(
     { label: 'Поверх всех окон', type: 'checkbox', checked: pinned, click: () => setPinned(!pinned) },
     { label: 'Иконка в доке', type: 'checkbox', checked: dockVisible, click: () => setDockVisible(!dockVisible) },
     { label: 'Скрыть эту иконку', click: () => setTrayVisible(false) },
@@ -260,8 +328,10 @@ function buildTrayMenu() {
       })),
     },
     { type: 'separator' },
-    { label: 'Выход', role: 'quit' },
-  ]);
+    { label: 'Выход', role: 'quit' }
+  );
+
+  const menu = Menu.buildFromTemplate(items);
   tray.setContextMenu(menu);
 }
 
@@ -275,6 +345,7 @@ function createTray() {
 app.whenReady().then(() => {
   loadConfig();
   createWindow();
+  initSensor();
   if (trayVisible) createTray();
   // menu-bar widget by default: no Dock icon unless the user asked for one
   applyDockPolicy();
@@ -287,6 +358,10 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
     else if (win && !win.isVisible()) win.show();
   });
+});
+
+app.on('before-quit', () => {
+  if (sensorManager) sensorManager.stop();
 });
 
 // keep running in the menu bar after the window closes
